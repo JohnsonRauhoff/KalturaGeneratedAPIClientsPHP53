@@ -783,15 +783,22 @@ class Base
 		return str_replace(array('+', '/'), array('-', '_'), base64_encode($decodedKs));
 	}
 
+	// remove dependency on mcrypt by using openssl_encrypt instead
+    // the server expects PKCS#5 padding so we postfix the remainder of 16 bytes with null terminators
 	protected static function aesEncrypt($key, $message)
 	{
-		return mcrypt_encrypt(
-			MCRYPT_RIJNDAEL_128,
-			substr(sha1($key, true), 0, 16),
-			$message,
-			MCRYPT_MODE_CBC,
-			str_repeat("\0", 16)	// no need for an IV since we add a random string to the message anyway
-		);
+        $messageSize = strlen($message);
+        if ($messageSize % 16 != 0) {
+            $remainder = 16 - $messageSize % 16;
+            $message .= str_repeat("\0", $remainder);
+        }
+        return openssl_encrypt(
+            $message,
+            'AES-128-CBC',
+            substr(sha1($key, true), 0, 16),
+            OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+            str_repeat("\0", 16)
+        );
 	}
 
 	private function hash ( $salt , $str )
