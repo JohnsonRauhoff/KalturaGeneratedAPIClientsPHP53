@@ -783,22 +783,33 @@ class Base
 		return str_replace(array('+', '/'), array('-', '_'), base64_encode($decodedKs));
 	}
 
-	// remove dependency on mcrypt by using openssl_encrypt instead
-    // the server expects PKCS#5 padding so we postfix the remainder of 16 bytes with null terminators
 	protected static function aesEncrypt($key, $message)
 	{
-        $messageSize = strlen($message);
-        if ($messageSize % 16 != 0) {
-            $remainder = 16 - $messageSize % 16;
-            $message .= str_repeat("\0", $remainder);
+        if (version_compare(phpversion(), '7.2.0', '>=')) {
+            // mcrypt is removed in 7.2 and higher.  Emulate with pkcs#5 padding using openssl
+            $messageSize = strlen($message);
+            if ($messageSize % 16 != 0) {
+                $remainder = 16 - $messageSize % 16;
+                $message .= str_repeat("\0", $remainder);
+            }
+            return openssl_encrypt(
+                $message,
+                'AES-128-CBC',
+                substr(sha1($key, true), 0, 16),
+                OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
+                str_repeat("\0", 16)
+            );
+        } else {
+            // in php 7.1 mcrypt is deprecated but not entirely removed.  Below 7.1 mcrypt is still standard.
+            // This is the default behavior of the php5.3 kaltura client library
+            return mcrypt_encrypt(
+                MCRYPT_RIJNDAEL_128,
+                substr(sha1($key, true), 0, 16),
+                $message,
+                MCRYPT_MODE_CBC,
+                str_repeat("\0", 16)	// no need for an IV since we add a random string to the message anyway
+            );
         }
-        return openssl_encrypt(
-            $message,
-            'AES-128-CBC',
-            substr(sha1($key, true), 0, 16),
-            OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,
-            str_repeat("\0", 16)
-        );
 	}
 
 	private function hash ( $salt , $str )
